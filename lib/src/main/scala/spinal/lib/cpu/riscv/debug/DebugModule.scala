@@ -398,6 +398,20 @@ case class DebugModule(p : DebugModuleParameter) extends Component{
         abstractcs.cmdErr := DebugModuleCmdErr.BUSY
       }
 
+      // Board/hart reset while an abstract/progbuf command is in flight leaves
+      // abstractcs.busy stuck (OpenOCD polls forever). Abort back to IDLE.
+      val selectedHaveReset = io.harts.map(_.haveReset).read(selected.hart)
+      val selectedUnavail = io.harts.map(_.unavailable).read(selected.hart)
+      val abortOnHartReset = abstractcs.busy && (selectedHaveReset || selectedUnavail)
+      when(abortOnHartReset && abstractcs.noError){
+        abstractcs.cmdErr := DebugModuleCmdErr.HALT_RESUME
+      }
+      always{
+        when(abortOnHartReset){
+          goto(IDLE)
+        }
+      }
+
       IDLE.onEntry(
         abstractcs.busy := False
       )
